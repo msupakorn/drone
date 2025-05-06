@@ -1,0 +1,54 @@
+#define TRIG_PIN PB0
+#define ECHO_PIN PB1
+#define LED_PIN PC13  // LED บนบอร์ด
+
+void setup() {
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH); // LED ดับ (active-low)
+  Serial.begin(9600);
+}
+
+void loop() {
+  // ส่ง trigger pulse
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  // วัดระยะ
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+  float distance = duration * 0.0343 / 2.0;
+
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+
+  if (distance > 20.0 || distance <= 0) {
+    // ไม่มีวัตถุหรือไกลเกิน 20 cm → ไฟดับ
+    digitalWrite(LED_PIN, HIGH);
+    delay(100);
+  } 
+  else if (distance > 15.0 && distance <= 20.0) {
+    // กะพริบช้า (1 วิ)
+    digitalWrite(LED_PIN, LOW);
+    delay(1000);
+    digitalWrite(LED_PIN, HIGH);
+    delay(1000);
+  } 
+  else if (distance > 5.0 && distance <= 15.0) {
+    // กะพริบเร็วขึ้นเมื่อเข้าใกล้ (delay แปรผันตามระยะ)
+    int blinkDelay = map((int)(distance * 10), 50, 150, 100, 500); // 5–15 cm → 100–500 ms
+    digitalWrite(LED_PIN, LOW);
+    delay(blinkDelay);
+    digitalWrite(LED_PIN, HIGH);
+    delay(blinkDelay);
+  } 
+  else if (distance <= 5.0) {
+    // ติดค้างเมื่อ ≤ 5 cm
+    digitalWrite(LED_PIN, LOW);
+    delay(100); // ป้องกัน loop เร็วเกิน
+  }
+}
