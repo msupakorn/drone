@@ -1,0 +1,116 @@
+#include <Wire.h>
+
+// MPU-6050 I2C
+TwoWire WIRE2(2, I2C_FAST_MODE);
+#define Wire WIRE2
+
+int16_t acc_axis[4], gyro_axis[4];
+float angle_pitch, angle_roll, angle_pitch_acc, angle_roll_acc;
+long loop_timer;
+bool first_angle = false;
+
+// Ultrasonic
+#define TRIG_PIN PB0
+#define ECHO_PIN PB1
+
+unsigned long last_print_time = 0;
+
+void setup() {
+  Serial1.begin(9600);
+
+  // I2C setup
+  Wire.setClock(400000);
+  Wire.begin();
+  delay(250);
+
+  // Wake MPU6050
+  Wire.beginTransmission(0x68);
+  Wire.write(0x6B);
+  Wire.write(0x00);
+  Wire.endTransmission();
+
+  // Ultrasonic pins
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  // Label header for Serial Plotter
+  Serial1.println("Pitch\tRoll\tYaw");
+}
+
+void loop() {
+  loop_timer = micros() + 4000;
+
+  // ------------------- Gyro + Accel Read ------------------
+  gyro_signalen();
+  acc_signalen();
+
+  // Gyro integration
+  angle_pitch += gyro_axis[2] * 0.0000611;  // Pitch from Gyro
+  angle_roll  += gyro_axis[1] * 0.0000611;  // Roll from Gyro
+
+  angle_pitch -= angle_roll * sin(gyro_axis[3] * 0.000001066);
+  angle_roll  += angle_pitch * sin(gyro_axis[3] * 0.000001066);
+
+  // Limit acc range
+  acc_axis[1] = constrain(acc_axis[1], -4096, 4096);
+  acc_axis[2] = constrain(acc_axis[2], -4096, 4096);
+
+  // Pitch & Roll from Accel
+  angle_pitch_acc = asin((float)acc_axis[1] / 4096) * 57.296;
+  angle_roll_acc  = asin((float)acc_axis[2] / 4096) * 57.296;
+
+  if (!first_angle) {
+    angle_pitch = angle_pitch_acc;
+    angle_roll = angle_roll_acc;
+    first_angle = true;
+  } else {
+    angle_pitch = angle_pitch * 0.9996 + angle_pitch_acc * 0.0004;
+    angle_roll = angle_roll * 0.9996 + angle_roll_acc * 0.0004;
+  }
+
+  // ------------------- Ultrasonic (Disabled) ------------------
+//  digitalWrite(TRIG_PIN, LOW);
+//  delayMicroseconds(2);
+//  digitalWrite(TRIG_PIN, HIGH);
+//  delayMicroseconds(10);
+//  digitalWrite(TRIG_PIN, LOW);
+//
+//  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+//  float distance = duration * 0.0343 / 2.0;
+
+  // ------------------- Output every 0.5 sec ------------------
+  //if (millis() - last_print_time >= 50) {
+  //  last_print_time = millis();
+
+    Serial1.print(angle_pitch, 1);
+    Serial1.print('\t');
+    Serial1.print(angle_roll, 1);
+    Serial1.print('\t');
+    Serial1.println(gyro_axis[3] / 65.5, 1); // Yaw
+  //}
+
+  while (micros() < loop_timer);
+}
+
+// ------------------- Sensor Functions ------------------
+void gyro_signalen() {
+  Wire.beginTransmission(0x68);
+  Wire.write(0x43);  // Gyro start register
+  Wire.endTransmission();
+  Wire.requestFrom(0x68, 6);
+
+  gyro_axis[1] = Wire.read() << 8 | Wire.read();  // Roll
+  gyro_axis[2] = Wire.read() << 8 | Wire.read();  // Pitch
+  gyro_axis[3] = Wire.read() << 8 | Wire.read();  // Yaw
+}
+
+void acc_signalen() {
+  Wire.beginTransmission(0x68);
+  Wire.write(0x3B);  // Accel start register
+  Wire.endTransmission();
+  Wire.requestFrom(0x68, 6);
+
+  acc_axis[1] = Wire.read() << 8 | Wire.read();  // X
+  acc_axis[2] = Wire.read() << 8 | Wire.read();  // Y
+  acc_axis[3] = Wire.read() << 8 | Wire.read();  // Z
+}
